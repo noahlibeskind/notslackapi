@@ -1,15 +1,16 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	// "log"
 	"net/http"
 	"os/exec"
-	"time"
 
-	"notslackapi/utils/token"
+	// "time"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/noahlibeskind/NotSlackAPI/utils"
+
+	// jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -55,63 +56,51 @@ var workspaces = []workspace{
 var mySigningKey = []byte("mysecretphrase")
 
 // passed when login is called
-func generateJWT() (string, error) {
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := token.Claims.(jwt.MapClaims)
+// func generateJWT() (string, error) {
+// 	token := jwt.New(jwt.SigningMethodHS256)
+// 	claims := token.Claims.(jwt.MapClaims)
 
-	claims["authorized"] = true
-	claims["user"] = "Noah Libeskind"
-	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
+// 	claims["authorized"] = true
+// 	claims["user"] = "Noah Libeskind"
+// 	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
 
-	tokenString, err := token.SignedString(mySigningKey)
+// 	tokenString, err := token.SignedString(mySigningKey)
 
-	if err != nil {
-		fmt.Errorf("Something went wrong: %s", err.Error())
-		return "", err
-	}
+// 	if err != nil {
+// 		fmt.Errorf("Something went wrong: %s", err.Error())
+// 		return "", err
+// 	}
 
-	return tokenString, nil
-}
-
-func JwtAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		err := token.TokenValid(c)
-		if err != nil {
-			c.String(http.StatusUnauthorized, "Unauthorized")
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
+// 	return tokenString, nil
+// }
 
 // check this anytime information is provided to client
-func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header["Token"] != nil {
-			token, err := jwt.Parse(r.Header["Token"][0], func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("There was an error")
-				}
-				return mySigningKey, nil
-			})
+// func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		if r.Header["Token"] != nil {
+// 			token, err := jwt.Parse(r.Header["Token"][0], func(token *jwt.Token) (interface{}, error) {
+// 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+// 					return nil, fmt.Errorf("There was an error")
+// 				}
+// 				return mySigningKey, nil
+// 			})
 
-			if err != nil {
-				fmt.Fprintf(w, err.Error())
-			}
-			if token.Valid {
-				endpoint(w, r)
-			}
-		} else {
-			fmt.Fprintf(w, "Not Authorized")
-		}
-	})
-}
+// 			if err != nil {
+// 				fmt.Fprintf(w, err.Error())
+// 			}
+// 			if token.Valid {
+// 				endpoint(w, r)
+// 			}
+// 		} else {
+// 			fmt.Fprintf(w, "Not Authorized")
+// 		}
+// 	})
+// }
 
 func getUsers(context *gin.Context) {
-	user_id, err := token.ExtractTokenID(context)
+	tokenStatus, err := utils.ExtractTokenID(context)
 
-	if err != nil {
+	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -147,7 +136,7 @@ func createUser(context *gin.Context) {
 			return
 		}
 		newUser.ID = string(newUUID)[0 : len(newUUID)-1]
-		newUser.AccessToken, _ = generateJWT()
+		newUser.AccessToken, _ = utils.GenerateToken(newUser.ID)
 
 		// query := `INSERT INTO users VALUES ($1, $2, $3, $4, $5)`
 		// _, err2 := q.Exec(query, newUser.ID, newUser.Name, newUser.Email, newUser.Password, newUser.AccessToken)
@@ -172,8 +161,7 @@ func login(context *gin.Context) {
 		for i, t := range users {
 			if t.Email == loginUser.Email {
 				if t.Password == loginUser.Password {
-
-					users[i].AccessToken, _ = generateJWT()
+					users[i].AccessToken, _ = utils.GenerateToken(users[i].ID)
 					context.IndentedJSON(http.StatusOK, users[i])
 					return
 				} else {
@@ -247,7 +235,7 @@ func main() {
 	router.POST("/newuser", createUser)
 
 	protected := router.Group("/api/admin")
-	protected.Use(middlewares.JwtAuthMiddleware())
+	protected.Use(utils.JwtAuthMiddleware())
 
 	protected.GET("/member", getUsers)
 	// router.GET("/todos/:id", getTodo)

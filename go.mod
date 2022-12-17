@@ -1,4 +1,4 @@
-module example/NotSlackAPI
+module github.com/noahlibeskind/NotSlackAPI
 
 go 1.19
 
