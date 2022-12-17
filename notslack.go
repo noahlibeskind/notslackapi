@@ -53,49 +53,9 @@ var workspaces = []workspace{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: "1"},
 }
 
+var workspace_users = map[string][]string{}
+
 var mySigningKey = []byte("mysecretphrase")
-
-// passed when login is called
-// func generateJWT() (string, error) {
-// 	token := jwt.New(jwt.SigningMethodHS256)
-// 	claims := token.Claims.(jwt.MapClaims)
-
-// 	claims["authorized"] = true
-// 	claims["user"] = "Noah Libeskind"
-// 	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
-
-// 	tokenString, err := token.SignedString(mySigningKey)
-
-// 	if err != nil {
-// 		fmt.Errorf("Something went wrong: %s", err.Error())
-// 		return "", err
-// 	}
-
-// 	return tokenString, nil
-// }
-
-// check this anytime information is provided to client
-// func isAuthorized(endpoint func(http.ResponseWriter, *http.Request)) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		if r.Header["Token"] != nil {
-// 			token, err := jwt.Parse(r.Header["Token"][0], func(token *jwt.Token) (interface{}, error) {
-// 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-// 					return nil, fmt.Errorf("There was an error")
-// 				}
-// 				return mySigningKey, nil
-// 			})
-
-// 			if err != nil {
-// 				fmt.Fprintf(w, err.Error())
-// 			}
-// 			if token.Valid {
-// 				endpoint(w, r)
-// 			}
-// 		} else {
-// 			fmt.Fprintf(w, "Not Authorized")
-// 		}
-// 	})
-// }
 
 func getUsers(context *gin.Context) {
 	tokenStatus, err := utils.ExtractTokenID(context)
@@ -105,6 +65,97 @@ func getUsers(context *gin.Context) {
 		return
 	}
 	context.IndentedJSON(http.StatusOK, users)
+}
+
+func getWorkSpaces(context *gin.Context) {
+	tokenStatus, err := utils.ExtractTokenID(context)
+
+	if err != nil || tokenStatus == 0 {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	context.IndentedJSON(http.StatusOK, workspaces)
+}
+
+func createWorkSpace(context *gin.Context) {
+	var newWS workspace
+
+	tokenStatus, _ := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+
+	err := context.BindJSON(&newWS)
+	// encoded JSON should only include name
+	if err != nil || tokenStatus == 0 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": err})
+		return
+	} else {
+		for _, t := range users {
+			if t.AccessToken == token {
+				// get ID from AccessToken
+				newWS.Owner = t.ID
+			}
+		}
+	}
+	newUUID, err := exec.Command("uuidgen").Output()
+	if err != nil {
+		return
+	}
+	newWS.ID = string(newUUID)[0 : len(newUUID)-1]
+	newWS.Channels = "0"
+	workspaces = append(workspaces, newWS)
+	context.IndentedJSON(http.StatusOK, newWS)
+	return
+}
+
+func addWorkSpaceMember(context *gin.Context) {
+	// workspace id
+	wsId := context.Param("wsId")
+	memId := context.Param("memId")
+
+	tokenStatus, err := utils.ExtractTokenID(context)
+	// verify auth
+	if err != nil || tokenStatus == 0 {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	} else {
+		for _, t := range workspaces {
+			if t.ID == wsId {
+				// found a workspace with this id, add member to it
+				_, ok := workspace_users[wsId]
+				if ok {
+					workspace_users[wsId] = append(workspace_users[wsId], memId)
+				} else {
+					workspace_users[wsId] = []string{memId}
+				}
+
+				context.IndentedJSON(http.StatusOK, workspace_users[wsId])
+				return
+			}
+		}
+	}
+}
+
+func workSpaceMembers(context *gin.Context) {
+	// workspace id
+	id := context.Param("id")
+
+	tokenStatus, err := utils.ExtractTokenID(context)
+	// verify auth
+	if err != nil || tokenStatus == 0 {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	} else {
+		for _, t := range workspaces {
+			if t.ID == id {
+				// found a workspace with this id
+				context.IndentedJSON(http.StatusOK, workspace_users[id])
+				return
+			}
+		}
+	}
+
+	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "no workspace found with this id"})
+	return
 }
 
 // func getTodoByID(id string) (*todo, error) {
@@ -138,12 +189,6 @@ func createUser(context *gin.Context) {
 		newUser.ID = string(newUUID)[0 : len(newUUID)-1]
 		newUser.AccessToken, _ = utils.GenerateToken()
 
-		// query := `INSERT INTO users VALUES ($1, $2, $3, $4, $5)`
-		// _, err2 := q.Exec(query, newUser.ID, newUser.Name, newUser.Email, newUser.Password, newUser.AccessToken)
-		// if err2 != nil {
-		// 	context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Database error"})
-		// 	return
-		// }
 		users = append(users, newUser)
 		context.IndentedJSON(http.StatusOK, newUser)
 		return
@@ -182,31 +227,6 @@ func login(context *gin.Context) {
 	return
 }
 
-// func addTodo(context *gin.Context) {
-// 	var newTodo todo
-
-// 	if err := context.BindJSON(&newTodo); err != nil {
-// 		return
-// 	}
-
-// 	todos = append(todos, newTodo)
-
-// 	context.IndentedJSON(http.StatusCreated, newTodo)
-// }
-
-// func toggleTodoStatus(context *gin.Context) {
-// 	id := context.Param("id")
-// 	todo, err := getTodoByID(id)
-// 	if err != nil {
-// 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
-// 		return
-// 	}
-// 	// toggle status!
-// 	todo.Completed = !todo.Completed
-// 	context.IndentedJSON(http.StatusOK, todo)
-// 	return
-// }
-
 // func deleteTodo(context *gin.Context) {
 // 	id := context.Param("id")
 // 	deleteIndex := -1
@@ -241,10 +261,12 @@ func main() {
 	router.POST("/login", login)
 	router.POST("/newuser", createUser)
 
-	protected := router.Group("/api/admin")
-	protected.Use(utils.JwtAuthMiddleware())
+	router.GET("/member", getUsers)
+	router.GET("/workspace", getWorkSpaces)
 
-	protected.GET("/member", getUsers)
+	router.POST("/workspace", createWorkSpace)
+	router.GET("/workspace/:id/member", workSpaceMembers)
+	router.POST("/workspace/:wsId/member/:memId", addWorkSpaceMember)
 	// router.GET("/todos/:id", getTodo)
 	// // Patch allows editing existing entries
 	// router.PATCH("/todos/:id", toggleTodoStatus)
