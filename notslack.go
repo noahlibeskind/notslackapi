@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "fmt"
+	"fmt"
 	// "log"
 	"net/http"
 	"os/exec"
@@ -136,7 +136,7 @@ func createUser(context *gin.Context) {
 			return
 		}
 		newUser.ID = string(newUUID)[0 : len(newUUID)-1]
-		newUser.AccessToken, _ = utils.GenerateToken(newUser.ID)
+		newUser.AccessToken, _ = utils.GenerateToken()
 
 		// query := `INSERT INTO users VALUES ($1, $2, $3, $4, $5)`
 		// _, err2 := q.Exec(query, newUser.ID, newUser.Name, newUser.Email, newUser.Password, newUser.AccessToken)
@@ -161,7 +161,13 @@ func login(context *gin.Context) {
 		for i, t := range users {
 			if t.Email == loginUser.Email {
 				if t.Password == loginUser.Password {
-					users[i].AccessToken, _ = utils.GenerateToken(users[i].ID)
+					users[i].AccessToken, err = utils.GenerateToken()
+					if err != nil {
+						fmt.Printf("Err: %s", err)
+						return
+					}
+					fmt.Println("Token:")
+					fmt.Printf("%s", users[i].AccessToken)
 					context.IndentedJSON(http.StatusOK, users[i])
 					return
 				} else {
@@ -171,6 +177,7 @@ func login(context *gin.Context) {
 			}
 		}
 	}
+
 	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Bad credentials"})
 	return
 }
