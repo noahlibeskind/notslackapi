@@ -51,12 +51,14 @@ var users = []user{
 }
 
 var workspaces = []workspace{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: "0"},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: "0", Owner: "00000000-0000-0000-0000-000000000000"},
 }
 
 var channels = []channel{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: "0"},
 }
+
+var messages = []message{}
 
 // maps workspace IDs to IDs of users in that workspace
 var workspace_users = map[string][]string{}
@@ -105,6 +107,7 @@ func getWorkSpaces(context *gin.Context) {
 }
 
 // creates a new workspace with logged in user as the owner
+// returns the created workspace
 func createWorkSpace(context *gin.Context) {
 	var newWS workspace
 
@@ -117,12 +120,17 @@ func createWorkSpace(context *gin.Context) {
 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": err})
 		return
 	} else {
-		for _, t := range users {
-			if t.AccessToken == token {
+		for _, u := range users {
+			if u.AccessToken == token {
 				// get ID from AccessToken
-				newWS.Owner = t.ID
+				newWS.Owner = u.ID
 			}
 		}
+	}
+	// not current logged in accessToken
+	if newWS.Owner == "" {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		return
 	}
 	newUUID, err := exec.Command("uuidgen").Output()
 	if err != nil {
@@ -135,7 +143,71 @@ func createWorkSpace(context *gin.Context) {
 	return
 }
 
+// creates a new workspace with logged in user as the owner
+// returns the created workspace
+func deleteWorkSpace(context *gin.Context) {
+
+	tokenStatus, _ := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+
+	if tokenStatus == 0 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		return
+	}
+
+	id := context.Param("id")
+	deleteIndex := -1
+	for i, w := range workspaces {
+		if w.ID == id {
+			deleteIndex = i
+			// check owner is logged in user
+			for _, u := range users {
+				if u.AccessToken == token {
+					// get ID from AccessToken, if not owner, return err
+					if u.ID != w.Owner {
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						return
+					}
+				}
+			}
+		}
+	}
+	if deleteIndex == -1 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	} else {
+
+		// remove all channels in workspace
+		for _, chID := range workspace_channels[id] {
+			for channelIndex, channel := range channels {
+				if channel.ID == chID {
+					// delete messages in channel
+					for _, mID := range channel_messages[chID] {
+						for messageIndex, message := range messages {
+							if message.ID == mID {
+								// delete message
+								messages[messageIndex] = messages[len(messages)-1]
+								messages = messages[0 : len(messages)-1]
+							}
+						}
+					}
+					// delete channel
+					channels[channelIndex] = channels[len(channels)-1]
+					channels = channels[0 : len(channels)-1]
+				}
+			}
+		}
+		// delete workspace
+		workspaces[deleteIndex] = workspaces[len(workspaces)-1]
+		workspaces = workspaces[0 : len(workspaces)-1]
+
+		context.IndentedJSON(http.StatusOK, workspaces)
+	}
+	return
+}
+
 // adds a member with id memId to workspace with id wsId
+// returns all members in that workspace
 // todo: make sure owner of wsId == loggedInUser
 func addWorkSpaceMember(context *gin.Context) {
 	// workspace id
@@ -158,14 +230,59 @@ func addWorkSpaceMember(context *gin.Context) {
 					workspace_users[wsId] = []string{memId}
 				}
 
-				context.IndentedJSON(http.StatusOK, workspace_users[wsId])
+				var wsMembers = []user{}
+				for _, t := range users {
+					if contains(workspace_users[wsId], t.ID) {
+						wsMembers = append(wsMembers, t)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, wsMembers)
+				// context.IndentedJSON(http.StatusOK, workspace_users[wsId])
 				return
 			}
 		}
 	}
 }
 
-// gets all users in the workspace with specified id
+// deletes the member with id memId to workspace with id wsId
+// returns all members in that workspace
+// todo: make sure owner of wsId == loggedInUser and EVERYTHING TO MAKE THIS WORK
+func deleteWorkSpaceMember(context *gin.Context) {
+	// workspace id
+	wsId := context.Param("wsId")
+	memId := context.Param("memId")
+
+	tokenStatus, err := utils.ExtractTokenID(context)
+	// verify auth
+	if err != nil || tokenStatus == 0 {
+		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	} else {
+		for _, t := range workspaces {
+			if t.ID == wsId {
+				// found a workspace with this id, add member to it
+				_, ok := workspace_users[wsId]
+				if ok {
+					workspace_users[wsId] = append(workspace_users[wsId], memId)
+				} else {
+					workspace_users[wsId] = []string{memId}
+				}
+
+				var wsMembers = []user{}
+				for _, t := range users {
+					if contains(workspace_users[wsId], t.ID) {
+						wsMembers = append(wsMembers, t)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, wsMembers)
+				// context.IndentedJSON(http.StatusOK, workspace_users[wsId])
+				return
+			}
+		}
+	}
+}
+
+// returns all users in the workspace with specified id
 func workSpaceMembers(context *gin.Context) {
 	// workspace id
 	id := context.Param("id")
@@ -179,7 +296,14 @@ func workSpaceMembers(context *gin.Context) {
 		for _, t := range workspaces {
 			if t.ID == id {
 				// found a workspace with this id
-				context.IndentedJSON(http.StatusOK, workspace_users[id])
+				var wsMembers = []user{}
+				for _, t := range users {
+					if contains(workspace_users[id], t.ID) {
+						wsMembers = append(wsMembers, t)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, wsMembers)
+				//context.IndentedJSON(http.StatusOK, workspace_users[id])
 				return
 			}
 		}
@@ -190,6 +314,7 @@ func workSpaceMembers(context *gin.Context) {
 }
 
 // adds a member with id memId to workspace with id wsId
+// returns all channels in that workspace
 // todo: make sure owner of wsId == loggedInUser
 func createChannel(context *gin.Context) {
 	// workspace id
@@ -225,13 +350,22 @@ func createChannel(context *gin.Context) {
 				count, _ := strconv.Atoi(workspaces[i].Channels)
 				workspaces[i].Channels = strconv.Itoa(count + 1)
 				channels = append(channels, newChannel)
-				context.IndentedJSON(http.StatusOK, workspace_channels[id])
+
+				var wsChannels = []channel{}
+				for _, t := range channels {
+					if contains(workspace_channels[id], t.ID) {
+						wsChannels = append(wsChannels, t)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, wsChannels)
+				//context.IndentedJSON(http.StatusOK, workspace_channels[id])
 				return
 			}
 		}
 	}
 }
 
+// returns all channels in the specified workspace
 func getChannels(context *gin.Context) {
 	tokenStatus, err := utils.ExtractTokenID(context)
 
@@ -253,6 +387,7 @@ func getChannels(context *gin.Context) {
 }
 
 // adds a member with id memId to workspace with id wsId
+// returns all messages in the channel
 // todo: make sure owner of wsId == loggedInUser
 func createMessage(context *gin.Context) {
 	// channel id
@@ -296,15 +431,23 @@ func createMessage(context *gin.Context) {
 				newMessage.Posted = time.Now()
 				count, _ := strconv.Atoi(channels[i].Messages)
 				channels[i].Messages = strconv.Itoa(count + 1)
-				context.IndentedJSON(http.StatusOK, channel_messages[id])
+				messages = append(messages, newMessage)
+
+				var chMessages = []message{}
+				for _, m := range messages {
+					if contains(channel_messages[id], m.ID) {
+						chMessages = append(chMessages, m)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, chMessages)
+				//context.IndentedJSON(http.StatusOK, channel_messages[id])
 				return
 			}
 		}
 	}
 }
 
-// adds a member with id memId to workspace with id wsId
-// todo: make sure owner of wsId == loggedInUser
+// returns all messages in the specified channel
 func getMessages(context *gin.Context) {
 	// channel id
 	id := context.Param("id")
@@ -318,7 +461,14 @@ func getMessages(context *gin.Context) {
 		for _, t := range channels {
 			if t.ID == id {
 				// found a channel with this id, add message to it
-				context.IndentedJSON(http.StatusOK, channel_messages[id])
+				var chMessages = []message{}
+				for _, m := range messages {
+					if contains(channel_messages[id], m.ID) {
+						chMessages = append(chMessages, m)
+					}
+				}
+				context.IndentedJSON(http.StatusOK, chMessages)
+				//context.IndentedJSON(http.StatusOK, channel_messages[id])
 				return
 			}
 		}
@@ -328,6 +478,7 @@ func getMessages(context *gin.Context) {
 }
 
 // creates a new user
+// returns the user object
 func createUser(context *gin.Context) {
 	var newUser user
 
@@ -356,7 +507,8 @@ func createUser(context *gin.Context) {
 	}
 }
 
-// logs in user with specified email and password, giving them a JWT
+// logs in user with specified email and password
+// returns the user object with a JWT if credentials are valid
 func login(context *gin.Context) {
 	var loginUser user
 
@@ -419,6 +571,8 @@ func main() {
 
 	router.GET("/workspace", getWorkSpaces)
 	router.POST("/workspace", createWorkSpace)
+	router.DELETE("/workspace/:id", deleteWorkSpace)
+
 	router.GET("/workspace/:id/member", workSpaceMembers)
 	router.POST("/workspace/:wsId/member/:memId", addWorkSpaceMember)
 
