@@ -176,7 +176,6 @@ func deleteWorkSpace(context *gin.Context) {
 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
 		return
 	} else {
-
 		// remove all channels in workspace
 		for _, chID := range workspace_channels[id] {
 			for channelIndex, channel := range channels {
@@ -350,9 +349,9 @@ func workSpaceMembers(context *gin.Context) {
 	return
 }
 
-// adds a member with id memId to workspace with id wsId
+// creates a channel in the workspace id
 // returns all channels in that workspace
-// todo: make sure owner of wsId == loggedInUser
+// todo: make sure owner of id == loggedInUser
 func createChannel(context *gin.Context) {
 	// workspace id
 	id := context.Param("id")
@@ -400,6 +399,78 @@ func createChannel(context *gin.Context) {
 			}
 		}
 	}
+}
+
+// deletes channel with id
+// returns all channels in that workspace
+// todo: make sure owner of id == loggedInUser
+
+// OOF we may need to map channel ids to workspace ids for internal use...
+func deleteChannel(context *gin.Context) {
+	tokenStatus, _ := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+
+	if tokenStatus == 0 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		return
+	}
+	id := context.Param("id") // channel id
+
+	// find the workspace
+	var channel_workspace workspace
+	for _, workspace := range workspaces {
+		for _, channelId := range workspace_channels[workspace.ID] {
+			if channelId == id {
+				channel_workspace = workspace
+			}
+		}
+	}
+	// find index in channel list
+	deleteIndex := -1
+	for i, c := range channels {
+		if c.ID == id {
+			deleteIndex = i
+			// check owner is logged in user
+			for _, u := range users {
+				if u.AccessToken == token {
+					// get ID from AccessToken, if not owner, return err
+					if u.ID != channel_workspace.Owner {
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						return
+					}
+				}
+			}
+		}
+	}
+	if deleteIndex == -1 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	} else {
+		for _, mID := range channel_messages[id] {
+			for messageIndex, message := range messages {
+				if message.ID == mID {
+					// delete message
+					messages[messageIndex] = messages[len(messages)-1]
+					messages = messages[0 : len(messages)-1]
+				}
+			}
+		}
+		// delete channel
+		channels[deleteIndex] = channels[len(channels)-1]
+		channels = channels[0 : len(channels)-1]
+	}
+
+	delete(channel_messages, id)
+
+	// return channels remaining in workspace
+	var wsChannels = []channel{}
+	for _, c := range channels {
+		if contains(workspace_channels[channel_workspace.ID], c.ID) {
+			wsChannels = append(wsChannels, c)
+		}
+	}
+	context.IndentedJSON(http.StatusOK, wsChannels)
+	return
 }
 
 // returns all channels in the specified workspace
@@ -578,28 +649,6 @@ func login(context *gin.Context) {
 	return
 }
 
-// func deleteTodo(context *gin.Context) {
-// 	id := context.Param("id")
-// 	deleteIndex := -1
-// 	for i, t := range todos {
-// 		if t.ID == id {
-// 			deleteIndex = i
-// 		}
-// 	}
-// 	if deleteIndex == -1 {
-// 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
-// 		return
-// 	} else {
-// 		// effectively removing, taking last element and putting it in deleteIndex's place
-// 		todos[deleteIndex] = todos[len(todos)-1]
-// 		todos = todos[0 : len(todos)-1]
-// 		context.IndentedJSON(http.StatusOK, todos)
-
-// 	}
-
-// 	return
-// }
-
 func main() {
 	router := gin.Default()
 	router.POST("/login", login)
@@ -608,14 +657,15 @@ func main() {
 
 	router.GET("/workspace", getWorkSpaces)
 	router.POST("/workspace", createWorkSpace)
-	router.DELETE("/workspace", deleteWorkSpace) // need to encode id json
+	router.DELETE("/workspace/:id", deleteWorkSpace)
 
 	router.GET("/workspace/:id/member", workSpaceMembers)
 	router.POST("/workspace/:wsId/member", addWorkSpaceMember)
-	router.DELETE("/workspace/:wsId/member", deleteWorkSpaceMember)
+	router.DELETE("/workspace/remove/:wsId/member", deleteWorkSpaceMember)
 
 	router.POST("/workspace/channel/:id", createChannel)
 	router.GET("/workspace/channel/:id", getChannels)
+	router.DELETE("/workspace/channel/:id", deleteChannel)
 
 	router.POST("/channel/:id/message", createMessage)
 	router.GET("/channel/:id/message", getMessages)
