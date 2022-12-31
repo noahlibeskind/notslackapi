@@ -201,6 +201,9 @@ func deleteWorkSpace(context *gin.Context) {
 		workspaces[deleteIndex] = workspaces[len(workspaces)-1]
 		workspaces = workspaces[0 : len(workspaces)-1]
 
+		delete(workspace_channels, id)
+		delete(workspace_users, id)
+
 		context.IndentedJSON(http.StatusOK, workspaces)
 	}
 	return
@@ -212,9 +215,14 @@ func deleteWorkSpace(context *gin.Context) {
 func addWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
-	memId := context.Param("memId")
+	//memId := context.Param("memId")
+	var newMember user
 
 	tokenStatus, err := utils.ExtractTokenID(context)
+
+	if err == nil {
+		err = context.BindJSON(&newMember)
+	}
 	// verify auth
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -225,9 +233,9 @@ func addWorkSpaceMember(context *gin.Context) {
 				// found a workspace with this id, add member to it
 				_, ok := workspace_users[wsId]
 				if ok {
-					workspace_users[wsId] = append(workspace_users[wsId], memId)
+					workspace_users[wsId] = append(workspace_users[wsId], newMember.ID)
 				} else {
-					workspace_users[wsId] = []string{memId}
+					workspace_users[wsId] = []string{newMember.ID}
 				}
 
 				var wsMembers = []user{}
@@ -250,12 +258,39 @@ func addWorkSpaceMember(context *gin.Context) {
 func deleteWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
-	memId := context.Param("memId")
+	var mem user
 
 	tokenStatus, err := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+
+	if err == nil {
+		err = context.BindJSON(&mem)
+	}
+
 	// verify auth
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	deleteIndex := -1
+	for i, w := range workspaces {
+		if w.ID == wsId {
+			deleteIndex = i
+			// check owner is logged in user
+			for _, u := range users {
+				if u.AccessToken == token {
+					// get ID from AccessToken, if user is not owner, return err
+					if u.ID != w.Owner {
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						return
+					}
+				}
+			}
+		}
+	}
+	if deleteIndex == -1 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
 		return
 	} else {
 		for _, t := range workspaces {
@@ -263,20 +298,22 @@ func deleteWorkSpaceMember(context *gin.Context) {
 				// found a workspace with this id, add member to it
 				_, ok := workspace_users[wsId]
 				if ok {
-					workspace_users[wsId] = append(workspace_users[wsId], memId)
-				} else {
-					workspace_users[wsId] = []string{memId}
-				}
-
-				var wsMembers = []user{}
-				for _, t := range users {
-					if contains(workspace_users[wsId], t.ID) {
-						wsMembers = append(wsMembers, t)
+					// found user with memID in workspace
+					// workspace_users[wsId] = append(workspace_users[wsId], memId)
+					for userIndex, user := range workspace_users[wsId] {
+						if user == mem.ID {
+							workspace_users[wsId][userIndex] = workspace_users[wsId][len(workspace_users[wsId])-1]
+							workspace_users[wsId] = workspace_users[wsId][0 : len(workspace_users[wsId])-1]
+							context.IndentedJSON(http.StatusOK, workspace_users[wsId])
+							return
+						}
 					}
+
+				} else {
+					// didn't find user with memID in workspace
+					context.JSON(http.StatusBadRequest, gin.H{"error": "User not found in this workspace"})
+					return
 				}
-				context.IndentedJSON(http.StatusOK, wsMembers)
-				// context.IndentedJSON(http.StatusOK, workspace_users[wsId])
-				return
 			}
 		}
 	}
@@ -571,10 +608,11 @@ func main() {
 
 	router.GET("/workspace", getWorkSpaces)
 	router.POST("/workspace", createWorkSpace)
-	router.DELETE("/workspace/:id", deleteWorkSpace)
+	router.DELETE("/workspace", deleteWorkSpace) // need to encode id json
 
 	router.GET("/workspace/:id/member", workSpaceMembers)
-	router.POST("/workspace/:wsId/member/:memId", addWorkSpaceMember)
+	router.POST("/workspace/:wsId/member", addWorkSpaceMember)
+	router.DELETE("/workspace/:wsId/member", deleteWorkSpaceMember)
 
 	router.POST("/workspace/channel/:id", createChannel)
 	router.GET("/workspace/channel/:id", getChannels)
