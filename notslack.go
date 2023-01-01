@@ -253,7 +253,7 @@ func addWorkSpaceMember(context *gin.Context) {
 
 // deletes the member with id memId to workspace with id wsId
 // returns all members in that workspace
-// todo: make sure owner of wsId == loggedInUser and EVERYTHING TO MAKE THIS WORK
+// todo: make sure owner of wsId == loggedInUser
 func deleteWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
@@ -294,7 +294,7 @@ func deleteWorkSpaceMember(context *gin.Context) {
 	} else {
 		for _, t := range workspaces {
 			if t.ID == wsId {
-				// found a workspace with this id, add member to it
+				// found a workspace with this id
 				_, ok := workspace_users[wsId]
 				if ok {
 					// found user with memID in workspace
@@ -351,7 +351,6 @@ func workSpaceMembers(context *gin.Context) {
 
 // creates a channel in the workspace id
 // returns all channels in that workspace
-// todo: make sure owner of id == loggedInUser
 func createChannel(context *gin.Context) {
 	// workspace id
 	id := context.Param("id")
@@ -403,9 +402,6 @@ func createChannel(context *gin.Context) {
 
 // deletes channel with id
 // returns all channels in that workspace
-// todo: make sure owner of id == loggedInUser
-
-// OOF we may need to map channel ids to workspace ids for internal use...
 func deleteChannel(context *gin.Context) {
 	tokenStatus, _ := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
@@ -418,10 +414,12 @@ func deleteChannel(context *gin.Context) {
 
 	// find the workspace
 	var channel_workspace workspace
-	for _, workspace := range workspaces {
+	for workspaceIndex, workspace := range workspaces {
 		for _, channelId := range workspace_channels[workspace.ID] {
 			if channelId == id {
 				channel_workspace = workspace
+				count, _ := strconv.Atoi(workspaces[workspaceIndex].Channels)
+				workspaces[workspaceIndex].Channels = strconv.Itoa(count - 1)
 			}
 		}
 	}
@@ -555,6 +553,83 @@ func createMessage(context *gin.Context) {
 	}
 }
 
+// deletes message with specified ID
+// todo: allow either poster of message or owner of workspace to delete
+func deleteMessage(context *gin.Context) {
+	tokenStatus, _ := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+
+	if tokenStatus == 0 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		return
+	}
+	id := context.Param("id") // message id
+
+	// find the channel
+	var message_channel channel
+	for channelIndex, channel := range channels {
+		for messageIndex, messageId := range channel_messages[channel.ID] {
+			if messageId == id {
+				message_channel = channel
+				channel_messages[message_channel.ID][messageIndex] = channel_messages[message_channel.ID][len(channel_messages[message_channel.ID])-1]
+				channel_messages[message_channel.ID] = channel_messages[message_channel.ID][0 : len(channel_messages[message_channel.ID])-1]
+				// decement count
+				count, _ := strconv.Atoi(channels[channelIndex].Messages)
+				channels[channelIndex].Messages = strconv.Itoa(count - 1)
+			}
+		}
+	}
+
+	// find the workspace
+	var channel_workspace workspace
+	for _, workspace := range workspaces {
+		for _, channelId := range workspace_channels[workspace.ID] {
+			if channelId == message_channel.ID {
+				channel_workspace = workspace
+			}
+		}
+	}
+	// find index in message list
+	deleteIndex := -1
+	for i, m := range messages {
+		if m.ID == id {
+			deleteIndex = i
+			// check owner is logged in user
+			for _, u := range users {
+				if u.AccessToken == token {
+					// get ID from AccessToken, if not owner, return err
+					if u.ID != channel_workspace.Owner && u.ID != m.Poster {
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						return
+					}
+				}
+			}
+		}
+	}
+	if deleteIndex == -1 {
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	} else {
+		for messageIndex, message := range messages {
+			if message.ID == id {
+				// delete message
+				messages[messageIndex] = messages[len(messages)-1]
+				messages = messages[0 : len(messages)-1]
+			}
+		}
+	}
+
+	// return channels remaining in workspace
+	var chMessages = []message{}
+	for _, m := range messages {
+		if contains(channel_messages[message_channel.ID], m.ID) {
+			chMessages = append(chMessages, m)
+		}
+	}
+	context.IndentedJSON(http.StatusOK, chMessages)
+	return
+}
+
 // returns all messages in the specified channel
 func getMessages(context *gin.Context) {
 	// channel id
@@ -566,8 +641,8 @@ func getMessages(context *gin.Context) {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	} else {
-		for _, t := range channels {
-			if t.ID == id {
+		for _, c := range channels {
+			if c.ID == id {
 				// found a channel with this id, add message to it
 				var chMessages = []message{}
 				for _, m := range messages {
@@ -669,6 +744,7 @@ func main() {
 
 	router.POST("/channel/:id/message", createMessage)
 	router.GET("/channel/:id/message", getMessages)
+	router.DELETE("/message/:id", deleteMessage)
 
 	router.Run("localhost:9090")
 }
