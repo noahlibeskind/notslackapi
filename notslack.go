@@ -5,7 +5,6 @@ import (
 	// "log"
 	"net/http"
 	"os/exec"
-	"strconv"
 
 	"time"
 
@@ -26,21 +25,21 @@ type user struct {
 type workspace struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
-	Channels string `json:"channels"`
+	Channels int    `json:"channels"`
 	Owner    string `json:"owner"`
 }
 
 type channel struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
-	Messages string `json:"messages"`
+	Messages int    `json:"messages"`
 }
 
 type message struct {
-	ID      string    `json:"id"`
-	Content string    `json:"content"`
-	Poster  string    `json:"poster"`
-	Posted  time.Time `json:"posted"`
+	ID      string `json:"id"`
+	Member  string `json:"member"`
+	Posted  string `json:"posted"`
+	Content string `json:"content"`
 }
 
 // mapping of workspace ids to the users inside them
@@ -51,11 +50,11 @@ var users = []user{
 }
 
 var workspaces = []workspace{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: "0", Owner: "00000000-0000-0000-0000-000000000000"},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: 0, Owner: "00000000-0000-0000-0000-000000000000"},
 }
 
 var channels = []channel{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: "0"},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: 0},
 }
 
 var messages = []message{}
@@ -137,7 +136,7 @@ func createWorkSpace(context *gin.Context) {
 		return
 	}
 	newWS.ID = string(newUUID)[0 : len(newUUID)-1]
-	newWS.Channels = "0"
+	newWS.Channels = 0 //"0"
 	workspaces = append(workspaces, newWS)
 	context.IndentedJSON(http.StatusOK, newWS)
 	return
@@ -381,9 +380,12 @@ func createChannel(context *gin.Context) {
 				} else {
 					workspace_channels[id] = []string{newChannel.ID}
 				}
-				newChannel.Messages = "0"
-				count, _ := strconv.Atoi(workspaces[i].Channels)
-				workspaces[i].Channels = strconv.Itoa(count + 1)
+				newChannel.Messages = 0
+
+				// increment channel count of parent workspace
+				count := workspaces[i].Channels
+				workspaces[i].Channels = count + 1
+
 				channels = append(channels, newChannel)
 
 				var wsChannels = []channel{}
@@ -393,7 +395,6 @@ func createChannel(context *gin.Context) {
 					}
 				}
 				context.IndentedJSON(http.StatusOK, wsChannels)
-				//context.IndentedJSON(http.StatusOK, workspace_channels[id])
 				return
 			}
 		}
@@ -418,8 +419,9 @@ func deleteChannel(context *gin.Context) {
 		for _, channelId := range workspace_channels[workspace.ID] {
 			if channelId == id {
 				channel_workspace = workspace
-				count, _ := strconv.Atoi(workspaces[workspaceIndex].Channels)
-				workspaces[workspaceIndex].Channels = strconv.Itoa(count - 1)
+				// decerement channels count of parent workspace
+				count := workspaces[workspaceIndex].Channels
+				workspaces[workspaceIndex].Channels = count + 1
 			}
 		}
 	}
@@ -494,7 +496,7 @@ func getChannels(context *gin.Context) {
 
 // adds a member with id memId to workspace with id wsId
 // returns all messages in the channel
-// todo: make sure owner of wsId == loggedInUser
+// todo: make sure channel exists, if not throw 400 err
 func createMessage(context *gin.Context) {
 	// channel id
 	id := context.Param("id")
@@ -514,7 +516,7 @@ func createMessage(context *gin.Context) {
 		for _, t := range users {
 			if t.AccessToken == token {
 				// get ID from AccessToken
-				newMessage.Poster = t.ID
+				newMessage.Member = t.ID
 			}
 		}
 		for i, t := range channels {
@@ -534,9 +536,11 @@ func createMessage(context *gin.Context) {
 					channel_messages[id] = []string{newMessage.ID}
 				}
 				// get current time
-				newMessage.Posted = time.Now()
-				count, _ := strconv.Atoi(channels[i].Messages)
-				channels[i].Messages = strconv.Itoa(count + 1)
+				newMessage.Posted = time.Now().UTC().Format(time.RFC3339) //time.Now()
+				// increment message count of parent channel
+				count := channels[i].Messages
+				channels[i].Messages = count + 1
+
 				messages = append(messages, newMessage)
 
 				var chMessages = []message{}
@@ -546,7 +550,6 @@ func createMessage(context *gin.Context) {
 					}
 				}
 				context.IndentedJSON(http.StatusOK, chMessages)
-				//context.IndentedJSON(http.StatusOK, channel_messages[id])
 				return
 			}
 		}
@@ -554,7 +557,7 @@ func createMessage(context *gin.Context) {
 }
 
 // deletes message with specified ID
-// todo: allow either poster of message or owner of workspace to delete
+// todo: allow either Member of message or owner of workspace to delete
 func deleteMessage(context *gin.Context) {
 	tokenStatus, _ := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
@@ -573,9 +576,9 @@ func deleteMessage(context *gin.Context) {
 				message_channel = channel
 				channel_messages[message_channel.ID][messageIndex] = channel_messages[message_channel.ID][len(channel_messages[message_channel.ID])-1]
 				channel_messages[message_channel.ID] = channel_messages[message_channel.ID][0 : len(channel_messages[message_channel.ID])-1]
-				// decement count
-				count, _ := strconv.Atoi(channels[channelIndex].Messages)
-				channels[channelIndex].Messages = strconv.Itoa(count - 1)
+				// decement messages count in parent channel
+				count := channels[channelIndex].Messages
+				channels[channelIndex].Messages = count + 1
 			}
 		}
 	}
@@ -598,7 +601,7 @@ func deleteMessage(context *gin.Context) {
 			for _, u := range users {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
-					if u.ID != channel_workspace.Owner && u.ID != m.Poster {
+					if u.ID != channel_workspace.Owner && u.ID != m.Member {
 						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
 						return
 					}
@@ -738,12 +741,12 @@ func main() {
 	router.POST("/workspace/:wsId/member", addWorkSpaceMember)
 	router.DELETE("/workspace/remove/:wsId/member", deleteWorkSpaceMember)
 
-	router.POST("/workspace/channel/:id", createChannel)
 	router.GET("/workspace/channel/:id", getChannels)
-	router.DELETE("/workspace/channel/:id", deleteChannel)
+	router.POST("/workspace/channel/:id", createChannel)
+	router.DELETE("/channel/:id", deleteChannel)
 
-	router.POST("/channel/:id/message", createMessage)
-	router.GET("/channel/:id/message", getMessages)
+	router.GET("/channel/message/:id", getMessages)
+	router.POST("/channel/message/:id", createMessage)
 	router.DELETE("/message/:id", deleteMessage)
 
 	router.Run("localhost:9090")
