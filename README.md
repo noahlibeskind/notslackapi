@@ -1,10 +1,14 @@
 NotSlack API 
+created by Noah Libeskind 
 
-CSE 118 Students beware: the some of the URLs for your calls to the API are changed! Here are the updates:
+This API supports the backend of a workplace messaging app that closely resembles an already existing one used by many professionals, hence the name "Not Slack".
+
+This API is built in the Go language and utilizes helpful packages like Gin from Gin-Gonic and Dave Grijalva's jwt-go package to support the (minimal) security implemented in this API.
+
+*** Below are the various URIs of this API and descriptions of their functionalities ***
 
 /newuser (POST) - allows you to create an account on the app with name, email, and password in a JSON object. A logged in instance of the new user is returned. 
-*** Access Tokens are only valid for one hour, then the user must login again.
-
+*Access Tokens are only valid for one hour, then the user must login again*
 Example:
 Body:
 {

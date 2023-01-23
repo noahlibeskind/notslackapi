@@ -1,17 +1,16 @@
+// NotSlack API
+// created by Noah Libeskind
+
 package main
 
 import (
 	"fmt"
-	// "log"
 	"net/http"
 	"os/exec"
-
 	"time"
 
-	"github.com/noahlibeskind/NotSlackAPI/utils"
-
-	// jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/noahlibeskind/NotSlackAPI/utils"
 )
 
 type user struct {

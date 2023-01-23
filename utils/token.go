@@ -1,3 +1,7 @@
+// NotSlack API
+// created by Noah Libeskind
+// the functions used here are closely derived from https://seefnasrul.medium.com/create-your-first-go-rest-api-with-jwt-authentication-in-gin-framework-dbe5bda72817
+
 package utils
 
 import (
@@ -12,13 +16,6 @@ import (
 )
 
 func GenerateToken() (string, error) {
-
-	//token_lifespan, err := strconv.Atoi(os.Getenv("TOKEN_HOUR_LIFESPAN"))
-
-	// if err != nil {
-	// 	return "", err
-	// }
-
 	claims := jwt.MapClaims{}
 	claims["authorized"] = true
 	claims["user_id"] = 0
@@ -56,7 +53,6 @@ func ExtractToken(c *gin.Context) string {
 }
 
 func ExtractTokenID(c *gin.Context) (uint, error) {
-
 	tokenString := ExtractToken(c)
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

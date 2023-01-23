@@ -1,3 +1,7 @@
+// NotSlack API
+// created by Noah Libeskind
+// the functions used here are closely derived from https://seefnasrul.medium.com/create-your-first-go-rest-api-with-jwt-authentication-in-gin-framework-dbe5bda72817
+
 package utils
 
 import (
