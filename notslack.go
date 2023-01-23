@@ -46,18 +46,22 @@ type message struct {
 // maybe need reverse mapping of user ids to workspaces they are a part of
 
 var users = []user{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "nlibeski@ucsc.edu", Password: "1651623", AccessToken: ""},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "noah@ucsc.edu", Password: "noah", AccessToken: ""},
 }
 
 var workspaces = []workspace{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: 0, Owner: "00000000-0000-0000-0000-000000000000"},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: 1, Owner: "00000000-0000-0000-0000-000000000000"},
 }
 
 var channels = []channel{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: 0},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: 1},
 }
 
-var messages = []message{}
+var messages = []message{
+	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01ZZZ", Content: "Thanks for not providing this, Dr. Harrison"},
+}
+
+var bad_rq_message = "Invalid Credentials"
 
 // maps workspace IDs to IDs of users in that workspace
 var workspace_users = map[string][]string{}
@@ -82,10 +86,9 @@ func contains(s []string, str string) bool {
 	return false
 }
 
-// get all users
+// get all other users (but not logged in user)
 func getUsers(context *gin.Context) {
 	tokenStatus, err := utils.ExtractTokenID(context)
-
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -94,15 +97,30 @@ func getUsers(context *gin.Context) {
 }
 
 // get all workspaces
-// todo: only get ws associated with a user from accessToken
 func getWorkSpaces(context *gin.Context) {
-	tokenStatus, err := utils.ExtractTokenID(context)
+	tokenStatus, _ := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+	loggedInUser := ""
 
-	if err != nil || tokenStatus == 0 {
-		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// encoded JSON should only include name
+	if tokenStatus == 0 {
+		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": bad_rq_message})
 		return
+	} else {
+		for _, u := range users {
+			if u.AccessToken == token {
+				// get ID from AccessToken
+				loggedInUser = u.ID
+			}
+		}
 	}
-	context.IndentedJSON(http.StatusOK, workspaces)
+	var userWorkspaces = []workspace{}
+	for _, w := range workspaces {
+		if contains(workspace_users[w.ID], loggedInUser) || w.Owner == loggedInUser {
+			userWorkspaces = append(userWorkspaces, w)
+		}
+	}
+	context.IndentedJSON(http.StatusOK, userWorkspaces)
 }
 
 // creates a new workspace with logged in user as the owner
@@ -128,7 +146,7 @@ func createWorkSpace(context *gin.Context) {
 	}
 	// not current logged in accessToken
 	if newWS.Owner == "" {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 		return
 	}
 	newUUID, err := exec.Command("uuidgen").Output()
@@ -136,7 +154,7 @@ func createWorkSpace(context *gin.Context) {
 		return
 	}
 	newWS.ID = string(newUUID)[0 : len(newUUID)-1]
-	newWS.Channels = 0 //"0"
+	newWS.Channels = 0
 	workspaces = append(workspaces, newWS)
 	context.IndentedJSON(http.StatusOK, newWS)
 	return
@@ -150,7 +168,7 @@ func deleteWorkSpace(context *gin.Context) {
 	token := utils.ExtractToken(context)
 
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 		return
 	}
 
@@ -164,7 +182,7 @@ func deleteWorkSpace(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != w.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 						return
 					}
 				}
@@ -209,7 +227,6 @@ func deleteWorkSpace(context *gin.Context) {
 
 // adds a member with id memId to workspace with id wsId
 // returns all members in that workspace
-// todo: make sure owner of wsId == loggedInUser
 func addWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
@@ -247,7 +264,6 @@ func addWorkSpaceMember(context *gin.Context) {
 
 // deletes the member with id memId to workspace with id wsId
 // returns all members in that workspace
-// todo: make sure owner of wsId == loggedInUser
 func deleteWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
@@ -271,7 +287,7 @@ func deleteWorkSpaceMember(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if user is not owner, return err
 					if u.ID != w.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 						return
 					}
 				}
@@ -314,24 +330,32 @@ func workSpaceMembers(context *gin.Context) {
 	id := context.Param("id")
 
 	tokenStatus, err := utils.ExtractTokenID(context)
+	token := utils.ExtractToken(context)
+	loggedInUser := ""
+
 	// verify auth
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	} else {
-		for _, t := range workspaces {
-			if t.ID == id {
-				// found a workspace with this id
-				var wsMembers = []user{}
-				for _, t := range users {
-					if contains(workspace_users[id], t.ID) {
-						wsMembers = append(wsMembers, t)
-					}
+	}
+	for _, u := range users {
+		if u.AccessToken == token {
+			// get ID from AccessToken
+			loggedInUser = u.ID
+		}
+	}
+
+	for _, t := range workspaces {
+		if t.ID == id {
+			// found a workspace with this id
+			var wsMembers = []user{}
+			for _, u := range users {
+				if contains(workspace_users[id], u.ID) && u.ID != loggedInUser {
+					wsMembers = append(wsMembers, u)
 				}
-				context.IndentedJSON(http.StatusOK, wsMembers)
-				//context.IndentedJSON(http.StatusOK, workspace_users[id])
-				return
 			}
+			context.IndentedJSON(http.StatusOK, wsMembers)
+			return
 		}
 	}
 
@@ -399,7 +423,7 @@ func deleteChannel(context *gin.Context) {
 	token := utils.ExtractToken(context)
 
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 		return
 	}
 	id := context.Param("id") // channel id
@@ -412,7 +436,7 @@ func deleteChannel(context *gin.Context) {
 				channel_workspace = workspace
 				// decerement channels count of parent workspace
 				count := workspaces[workspaceIndex].Channels
-				workspaces[workspaceIndex].Channels = count + 1
+				workspaces[workspaceIndex].Channels = count - 1
 			}
 		}
 	}
@@ -426,7 +450,7 @@ func deleteChannel(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != channel_workspace.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 						return
 					}
 				}
@@ -487,7 +511,6 @@ func getChannels(context *gin.Context) {
 
 // adds a member with id memId to workspace with id wsId
 // returns all messages in the channel
-// todo: make sure channel exists, if not throw 400 err
 func createMessage(context *gin.Context) {
 	// channel id
 	id := context.Param("id")
@@ -544,17 +567,18 @@ func createMessage(context *gin.Context) {
 				return
 			}
 		}
+		context.JSON(http.StatusBadRequest, gin.H{"error": "Channel does not exist"})
+		return
 	}
 }
 
 // deletes message with specified ID
-// todo: allow either Member of message or owner of workspace to delete
 func deleteMessage(context *gin.Context) {
 	tokenStatus, _ := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
 
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+		context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 		return
 	}
 	id := context.Param("id") // message id
@@ -569,7 +593,7 @@ func deleteMessage(context *gin.Context) {
 				channel_messages[message_channel.ID] = channel_messages[message_channel.ID][0 : len(channel_messages[message_channel.ID])-1]
 				// decement messages count in parent channel
 				count := channels[channelIndex].Messages
-				channels[channelIndex].Messages = count + 1
+				channels[channelIndex].Messages = count - 1
 			}
 		}
 	}
@@ -593,7 +617,7 @@ func deleteMessage(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != channel_workspace.Owner && u.ID != m.Member {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Bad Credentials"})
+						context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 						return
 					}
 				}
@@ -707,18 +731,26 @@ func login(context *gin.Context) {
 					context.IndentedJSON(http.StatusOK, users[i])
 					return
 				} else {
-					context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Bad credentials"})
+					context.IndentedJSON(http.StatusBadRequest, gin.H{"message": bad_rq_message})
 					return
 				}
 			}
 		}
 	}
 
-	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Bad credentials"})
+	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": bad_rq_message})
 	return
 }
 
 func main() {
+	// initializing World Wide Workspace... feel free to delete this :)
+	workspace_channels["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
+	workspace_users["00000000-0000-0000-0000-000000000000"] = []string{}
+	channel_messages["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
+	for _, u := range users {
+		workspace_users["00000000-0000-0000-0000-000000000000"] = append(workspace_users["00000000-0000-0000-0000-000000000000"], u.ID)
+	}
+
 	router := gin.Default()
 	router.POST("/login", login)
 	router.POST("/newuser", createUser)
