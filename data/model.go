@@ -1,6 +1,6 @@
 package data
 
-type user struct {
+type User struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Email       string `json:"email"`
@@ -8,38 +8,49 @@ type user struct {
 	AccessToken string `json:"accessToken"`
 }
 
-type workspace struct {
+type Workspace struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Channels int    `json:"channels"`
 	Owner    string `json:"owner"`
 }
 
-type channel struct {
+type Channel struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Messages int    `json:"messages"`
 }
 
-type message struct {
+type Message struct {
 	ID      string `json:"id"`
 	Member  string `json:"member"`
 	Posted  string `json:"posted"`
 	Content string `json:"content"`
 }
 
-var users = []user{
+var Users = []User{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "noah@ucsc.edu", Password: "noah", AccessToken: ""},
 }
 
-var workspaces = []workspace{
+var Workspaces = []Workspace{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "(WWW) World Wide Workspace", Channels: 1, Owner: "00000000-0000-0000-0000-000000000000"},
 }
 
-var channels = []channel{
+var Channels = []Channel{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "World Chat Channel", Messages: 1},
 }
 
-var messages = []message{
+var Messages = []Message{
 	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01ZZZ", Content: "Hello! Welcome to the world chat channel!"},
 }
+
+// maps workspace IDs to IDs of users in that workspace
+var Workspace_users = map[string][]string{}
+
+// maps workspace IDs to IDs of channels in that workspace
+var Workspace_channels = map[string][]string{}
+
+// maps channel IDs to IDs of messages in that channel
+var Channel_messages = map[string][]string{}
+
+var Bad_rq_message = "Invalid Credentials"
