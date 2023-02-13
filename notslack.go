@@ -41,9 +41,6 @@ type message struct {
 	Content string `json:"content"`
 }
 
-// mapping of workspace ids to the users inside them
-// maybe need reverse mapping of user ids to workspaces they are a part of
-
 var users = []user{
 	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "noah@ucsc.edu", Password: "noah", AccessToken: ""},
 }
@@ -57,7 +54,7 @@ var channels = []channel{
 }
 
 var messages = []message{
-	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01ZZZ", Content: "Thanks for not providing this, Dr. Harrison"},
+	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01ZZZ", Content: "Hello! Welcome to the world chat channel!"},
 }
 
 var bad_rq_message = "Invalid Credentials"
@@ -73,7 +70,7 @@ var channel_messages = map[string][]string{}
 
 var mySigningKey = []byte("notslackisnotsecure")
 
-// https://play.golang.org/p/Qg_uv_inCek
+// derived from https://play.golang.org/p/Qg_uv_inCek
 // contains checks if a string is present in a slice
 func contains(s []string, str string) bool {
 	for _, v := range s {
@@ -85,7 +82,7 @@ func contains(s []string, str string) bool {
 	return false
 }
 
-// get all other users (but not logged in user)
+// get all users
 func getUsers(context *gin.Context) {
 	tokenStatus, err := utils.ExtractTokenID(context)
 	if err != nil || tokenStatus == 0 {
@@ -100,7 +97,6 @@ func getWorkSpaces(context *gin.Context) {
 	tokenStatus, _ := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
 	loggedInUser := ""
-
 	// encoded JSON should only include name
 	if tokenStatus == 0 {
 		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": bad_rq_message})
@@ -162,15 +158,12 @@ func createWorkSpace(context *gin.Context) {
 // creates a new workspace with logged in user as the owner
 // returns the created workspace
 func deleteWorkSpace(context *gin.Context) {
-
 	tokenStatus, _ := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
-
 	if tokenStatus == 0 {
 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": bad_rq_message})
 		return
 	}
-
 	id := context.Param("id")
 	deleteIndex := -1
 	for i, w := range workspaces {
@@ -215,10 +208,8 @@ func deleteWorkSpace(context *gin.Context) {
 		// delete workspace
 		workspaces[deleteIndex] = workspaces[len(workspaces)-1]
 		workspaces = workspaces[0 : len(workspaces)-1]
-
 		delete(workspace_channels, id)
 		delete(workspace_users, id)
-
 		context.IndentedJSON(http.StatusOK, workspaces)
 	}
 	return
@@ -230,9 +221,7 @@ func addWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
 	memId := context.Request.URL.Query().Get("mid")
-
 	tokenStatus, err := utils.ExtractTokenID(context)
-
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -258,6 +247,7 @@ func addWorkSpaceMember(context *gin.Context) {
 				return
 			}
 		}
+		return
 	}
 }
 
@@ -267,10 +257,8 @@ func deleteWorkSpaceMember(context *gin.Context) {
 	// workspace id
 	wsId := context.Param("wsId")
 	memId := context.Request.URL.Query().Get("mid")
-
 	tokenStatus, err := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
-
 	// verify auth
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -320,6 +308,7 @@ func deleteWorkSpaceMember(context *gin.Context) {
 				}
 			}
 		}
+		return
 	}
 }
 
@@ -327,11 +316,9 @@ func deleteWorkSpaceMember(context *gin.Context) {
 func workSpaceMembers(context *gin.Context) {
 	// workspace id
 	id := context.Param("id")
-
 	tokenStatus, err := utils.ExtractTokenID(context)
 	token := utils.ExtractToken(context)
 	loggedInUser := ""
-
 	// verify auth
 	if err != nil || tokenStatus == 0 {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -343,7 +330,6 @@ func workSpaceMembers(context *gin.Context) {
 			loggedInUser = u.ID
 		}
 	}
-
 	for _, t := range workspaces {
 		if t.ID == id {
 			// found a workspace with this id
@@ -700,6 +686,8 @@ func createUser(context *gin.Context) {
 		}
 		newUser.ID = string(newUUID)[0 : len(newUUID)-1]
 		newUser.AccessToken, _ = utils.GenerateToken()
+
+		workspace_users["00000000-0000-0000-0000-000000000000"] = append(workspace_users["00000000-0000-0000-0000-000000000000"], newUser.ID)
 
 		users = append(users, newUser)
 		context.IndentedJSON(http.StatusOK, newUser)
