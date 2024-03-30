@@ -16,7 +16,6 @@ func contains(s []string, str string) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -27,7 +26,7 @@ func GetWorkSpaces(context *gin.Context) {
 	loggedInUser := ""
 	// encoded JSON should only include name
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	} else {
 		for _, u := range data.Users {
@@ -69,7 +68,7 @@ func CreateWorkSpace(context *gin.Context) {
 	}
 	// not current logged in accessToken
 	if newWS.Owner == "" {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	}
 	newUUID, err := exec.Command("uuidgen").Output()
@@ -80,7 +79,6 @@ func CreateWorkSpace(context *gin.Context) {
 	newWS.Channels = 0
 	data.Workspaces = append(data.Workspaces, newWS)
 	context.IndentedJSON(http.StatusOK, newWS)
-	return
 }
 
 // creates a new workspace with logged in user as the owner
@@ -89,7 +87,7 @@ func DeleteWorkSpace(context *gin.Context) {
 	tokenStatus, _ := ExtractTokenID(context)
 	token := ExtractToken(context)
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	}
 	id := context.Param("id")
@@ -102,7 +100,7 @@ func DeleteWorkSpace(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != w.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+						context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 						return
 					}
 				}
@@ -140,7 +138,6 @@ func DeleteWorkSpace(context *gin.Context) {
 		delete(data.Workspace_users, id)
 		context.IndentedJSON(http.StatusOK, data.Workspaces)
 	}
-	return
 }
 
 // adds a member with id memId to workspace with id wsId
@@ -171,7 +168,6 @@ func AddWorkSpaceMember(context *gin.Context) {
 					}
 				}
 				context.IndentedJSON(http.StatusOK, wsMembers)
-				// context.IndentedJSON(http.StatusOK, workspace_users[wsId])
 				return
 			}
 		}
@@ -202,7 +198,7 @@ func DeleteWorkSpaceMember(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if user is not owner, return err
 					if u.ID != w.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+						context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 						return
 					}
 				}
@@ -270,7 +266,5 @@ func WorkSpaceMembers(context *gin.Context) {
 			return
 		}
 	}
-
 	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "no workspace found with this id"})
-	return
 }

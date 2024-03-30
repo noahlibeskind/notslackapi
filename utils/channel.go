@@ -17,7 +17,10 @@ func CreateChannel(context *gin.Context) {
 	var newChannel data.Channel
 	// JSON should include channel name only
 	err := context.BindJSON(&newChannel)
-
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	tokenStatus, err := ExtractTokenID(context)
 	// verify auth
 	if err != nil || tokenStatus == 0 {
@@ -68,7 +71,7 @@ func DeleteChannel(context *gin.Context) {
 	token := ExtractToken(context)
 
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	}
 	id := context.Param("id") // channel id
@@ -95,7 +98,7 @@ func DeleteChannel(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != channel_workspace.Owner {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+						context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 						return
 					}
 				}
@@ -130,7 +133,6 @@ func DeleteChannel(context *gin.Context) {
 		}
 	}
 	context.IndentedJSON(http.StatusOK, wsChannels)
-	return
 }
 
 // returns all channels in the specified workspace

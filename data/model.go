@@ -29,7 +29,7 @@ type Message struct {
 }
 
 var Users = []User{
-	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "noah@ucsc.edu", Password: "noah", AccessToken: ""},
+	{ID: "00000000-0000-0000-0000-000000000000", Name: "Noah Libeskind", Email: "noah@ucsc.edu", Password: "pass", AccessToken: ""},
 }
 
 var Workspaces = []Workspace{
@@ -41,7 +41,7 @@ var Channels = []Channel{
 }
 
 var Messages = []Message{
-	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01ZZZ", Content: "Hello! Welcome to the world chat channel!"},
+	{ID: "00000000-0000-0000-0000-000000000000", Member: "00000000-0000-0000-0000-000000000000", Posted: "2023-01-02T00:01:01Z", Content: "Hello! Welcome to the world chat channel!"},
 }
 
 // maps workspace IDs to IDs of users in that workspace
@@ -53,4 +53,4 @@ var Workspace_channels = map[string][]string{}
 // maps channel IDs to IDs of messages in that channel
 var Channel_messages = map[string][]string{}
 
-var Bad_rq_message = "Invalid Credentials"
+var Unauthorized_message = "Invalid Credentials"

@@ -18,7 +18,10 @@ func CreateMessage(context *gin.Context) {
 	var newMessage data.Message
 	// JSON should include message content only
 	err := context.BindJSON(&newMessage)
-
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	tokenStatus, err := ExtractTokenID(context)
 	token := ExtractToken(context)
 
@@ -78,7 +81,7 @@ func DeleteMessage(context *gin.Context) {
 	token := ExtractToken(context)
 
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	}
 	id := context.Param("id") // message id
@@ -117,7 +120,7 @@ func DeleteMessage(context *gin.Context) {
 				if u.AccessToken == token {
 					// get ID from AccessToken, if not owner, return err
 					if u.ID != channel_workspace.Owner && u.ID != m.Member {
-						context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+						context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 						return
 					}
 				}
@@ -145,7 +148,6 @@ func DeleteMessage(context *gin.Context) {
 		}
 	}
 	context.IndentedJSON(http.StatusOK, chMessages)
-	return
 }
 
 // returns all messages in the specified channel
@@ -174,5 +176,4 @@ func GetMessages(context *gin.Context) {
 		}
 	}
 	context.JSON(http.StatusBadRequest, gin.H{"message": "channel not found"})
-	return
 }
