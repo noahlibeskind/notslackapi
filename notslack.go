@@ -9,8 +9,6 @@ import (
 	"github.com/noahlibeskind/NotSlackAPI/utils"
 )
 
-var mySigningKey = []byte("notslackisnotsecure")
-
 // CORSMiddleware is a custom middleware function that wraps the cors handler in a gin.HandlerFunc
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -29,14 +27,12 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func main() {
-	// initializing World Wide Workspace... feel free to delete this :)
+	// initializing World Wide Workspace:
 	data.Workspace_users["00000000-0000-0000-0000-000000000000"] = []string{}
 	data.Workspace_channels["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
 	data.Channel_messages["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
 
 	router := gin.Default()
-
-	// c := cors.Default()
 
 	router.Use(CORSMiddleware())
 

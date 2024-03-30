@@ -53,4 +53,4 @@ var Workspace_channels = map[string][]string{}
 // maps channel IDs to IDs of messages in that channel
 var Channel_messages = map[string][]string{}
 
-var Bad_rq_message = "Invalid Credentials"
+var Unauthorized_message = "Invalid Credentials"

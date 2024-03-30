@@ -47,7 +47,7 @@ func DeleteUser(context *gin.Context) {
 	tokenStatus, _ := ExtractTokenID(context)
 	token := ExtractToken(context)
 	if tokenStatus == 0 {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+		context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 		return
 	}
 	id := context.Param("uid")
@@ -57,7 +57,7 @@ func DeleteUser(context *gin.Context) {
 		if u.AccessToken == token {
 			// get ID from AccessToken, if not owner, return err
 			if u.ID != id {
-				context.IndentedJSON(http.StatusNotFound, gin.H{"message": data.Bad_rq_message})
+				context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 				return
 			}
 		}
@@ -78,11 +78,11 @@ func DeleteUser(context *gin.Context) {
 			for wuIndex, wuId := range data.Workspace_users[workspace.ID] {
 				if wuId == id {
 					data.Workspace_users[workspace.ID][wuIndex] = data.Workspace_users[workspace.ID][len(data.Workspace_users[workspace.ID])-1]
-					data.Workspace_users[workspace.ID] = data.Workspace_users[workspace.ID][0: len(data.Workspace_users[workspace.ID])-1]
+					data.Workspace_users[workspace.ID] = data.Workspace_users[workspace.ID][0 : len(data.Workspace_users[workspace.ID])-1]
 				}
 			}
 		}
-		
+
 		for mIndex, m := range data.Messages {
 			// scan for any messages posted by this member
 			if m.Member == id {
@@ -98,7 +98,6 @@ func DeleteUser(context *gin.Context) {
 		}
 	}
 	context.IndentedJSON(http.StatusOK, nil)
-	return
 }
 
 // logs in user with specified email and password
@@ -123,15 +122,14 @@ func Login(context *gin.Context) {
 					context.IndentedJSON(http.StatusOK, data.Users[i])
 					return
 				} else {
-					context.IndentedJSON(http.StatusBadRequest, gin.H{"message": data.Bad_rq_message})
+					context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 					return
 				}
 			}
 		}
 	}
 
-	context.IndentedJSON(http.StatusBadRequest, gin.H{"message": data.Bad_rq_message})
-	return
+	context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 }
 
 // get all users
