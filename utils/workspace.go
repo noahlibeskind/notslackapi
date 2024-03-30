@@ -22,6 +22,7 @@ func contains(s []string, str string) bool {
 
 // get all workspaces
 func GetWorkSpaces(context *gin.Context) {
+
 	tokenStatus, _ := ExtractTokenID(context)
 	token := ExtractToken(context)
 	loggedInUser := ""
@@ -171,7 +172,6 @@ func AddWorkSpaceMember(context *gin.Context) {
 					}
 				}
 				context.IndentedJSON(http.StatusOK, wsMembers)
-				// context.IndentedJSON(http.StatusOK, workspace_users[wsId])
 				return
 			}
 		}
