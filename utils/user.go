@@ -97,7 +97,7 @@ func DeleteUser(context *gin.Context) {
 			}
 		}
 	}
-	context.IndentedJSON(http.StatusOK, nil)
+	context.IndentedJSON(http.StatusNoContent, nil)
 }
 
 // logs in user with specified email and password
