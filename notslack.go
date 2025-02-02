@@ -5,6 +5,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/noahlibeskind/NotSlackAPI/clients"
 	"github.com/noahlibeskind/NotSlackAPI/data"
 	"github.com/noahlibeskind/NotSlackAPI/utils"
 )
@@ -31,6 +32,7 @@ func main() {
 	data.Workspace_users["00000000-0000-0000-0000-000000000000"] = []string{}
 	data.Workspace_channels["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
 	data.Channel_messages["00000000-0000-0000-0000-000000000000"] = []string{"00000000-0000-0000-0000-000000000000"}
+	clients.InitSupabase()
 
 	router := gin.Default()
 

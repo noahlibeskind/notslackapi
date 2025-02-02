@@ -2,10 +2,12 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 
 	"github.com/gin-gonic/gin"
+	"github.com/noahlibeskind/NotSlackAPI/clients"
 	"github.com/noahlibeskind/NotSlackAPI/data"
 )
 
@@ -100,12 +102,26 @@ func DeleteUser(context *gin.Context) {
 	context.IndentedJSON(http.StatusNoContent, nil)
 }
 
+// Authenticate a user with email & password
+func AuthenticateUser(email, password string) {
+	fmt.Println("Email, password", email, password)
+
+	user, err := clients.AuthClient.Auth.SignInWithEmailPassword(email, password)
+	if err != nil {
+		log.Fatal("Failed to sign in: ", err)
+	}
+	
+	fmt.Println("User authenticated:", user)
+}
+
+
 // logs in user with specified email and password
 // returns the user object with a JWT if credentials are valid
 func Login(context *gin.Context) {
 	var loginUser data.User
-
 	err := context.BindJSON(&loginUser)
+
+	AuthenticateUser(loginUser.Email, loginUser.Password)
 	if err != nil {
 		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "Server error"})
 		return
@@ -131,6 +147,7 @@ func Login(context *gin.Context) {
 
 	context.IndentedJSON(http.StatusUnauthorized, gin.H{"message": data.Unauthorized_message})
 }
+
 
 // get all users
 func GetUsers(context *gin.Context) {
